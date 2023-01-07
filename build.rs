@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 fn main() {
     // Tell cargo to look for shared libraries in the specified directory
-    println!("cargo:rustc-link-search=/home/dietpi/dev/sensors/lib");
+    println!("cargo:rustc-link-search=./lib");
 
     // Tell cargo to tell rustc to link the library.
     println!("cargo:rustc-link-lib=static:+whole-archive=algobsec");
