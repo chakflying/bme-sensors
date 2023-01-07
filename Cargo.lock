@@ -59,6 +59,7 @@ name = "bme-sensors"
 version = "0.1.0"
 dependencies = [
  "bindgen",
+ "cc",
  "chrono",
  "regex",
 ]
