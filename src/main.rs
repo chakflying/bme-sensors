@@ -6,127 +6,37 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 use chrono::Local;
 mod bme;
+mod bsec;
 
 fn main() -> std::io::Result<()> {
     println!("Hello World!");
     let time_now = Local::now().naive_local();
     println!("Time now is: {}", time_now);
 
-    let mut version = bsec_version_t {
-        major: 0,
-        minor: 0,
-        major_bugfix: 0,
-        minor_bugfix: 0,
-    };
+    let mut bsec_state = bsec::State::default();
 
-    let mut result = bsec_library_return_t::BSEC_OK;
+    bsec::get_version(&mut bsec_state);
 
-    unsafe {
-        bsec_get_version(&mut version as *mut bsec_version_t);
-    }
+    bsec::init(&mut bsec_state);
 
-    println!(
-        "BSEC Version: {}.{}.{}",
-        version.major, version.minor, version.major_bugfix
-    );
-
-    unsafe {
-        result = bsec_init();
-    }
-
-    print_result(result, "Init");
-
-    let mut requested_virtual_sensors: Vec<bsec_sensor_configuration_t> = Vec::new();
-
-    requested_virtual_sensors.push(bsec_sensor_configuration_t {
-        sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
-        sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_STATIC_IAQ as u8,
-    });
-
-    requested_virtual_sensors.push(bsec_sensor_configuration_t {
-        sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
-        sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE as u8,
-    });
-
-    requested_virtual_sensors.push(bsec_sensor_configuration_t {
-        sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
-        sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY as u8,
-    });
-
-    requested_virtual_sensors.push(bsec_sensor_configuration_t {
-        sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
-        sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_STABILIZATION_STATUS as u8,
-    });
-
-    let mut required_sensor_settings: Vec<bsec_sensor_configuration_t> = Vec::new();
-
-    for _ in 0..BSEC_MAX_PHYSICAL_SENSOR {
-        required_sensor_settings.push(bsec_sensor_configuration_t {
-            sample_rate: 0f32,
-            sensor_id: 1,
-        })
-    }
-
-    let mut n_required_sensor_settings: u8 = BSEC_MAX_PHYSICAL_SENSOR as u8;
-
-    unsafe {
-        result = bsec_update_subscription(
-            requested_virtual_sensors.as_mut_ptr(),
-            requested_virtual_sensors.len() as u8,
-            required_sensor_settings.as_mut_ptr(),
-            &mut n_required_sensor_settings as *mut u8,
-        );
-    }
-
-    print_result(result, "Update Subscription");
-
-    let mut sensor_settings: bsec_bme_settings_t = bsec_bme_settings_t::default();
-
-    unsafe {
-        result = bsec_sensor_control(
-            Local::now().timestamp_nanos(),
-            &mut sensor_settings as *mut bsec_bme_settings_t,
-        );
-    }
-
-    print_result(result, "Sensor Control");
-
-    println!("{:?}", sensor_settings);
+    bsec::update_subscription(&mut bsec_state);
+    
+    bsec::get_sensor_config(&mut bsec_state);
 
     let timestamp = Local::now().timestamp_nanos();
 
     let mut sensor_inputs = Vec::new();
 
-    for i in 0..n_required_sensor_settings as usize {
+    for i in 0..bsec_state.n_required_sensor_settings as usize {
         sensor_inputs.push(bsec_input_t {
             time_stamp: timestamp,
             signal: 0f32,
             signal_dimensions: 1,
-            sensor_id: required_sensor_settings.get(i).unwrap().sensor_id,
+            sensor_id: bsec_state.required_sensor_settings.get(i).unwrap().sensor_id,
         });
     }
 
-    let mut sensor_outputs = Vec::new();
-    let mut n_sensor_outputs: u8 = requested_virtual_sensors.len() as u8;
-
-    for _ in 0..requested_virtual_sensors.len() {
-        sensor_outputs.push(bsec_output_t::default());
-    }
-
-    unsafe {
-        result = bsec_do_steps(
-            sensor_inputs.as_mut_ptr(),
-            n_required_sensor_settings,
-            sensor_outputs.as_mut_ptr(),
-            &mut n_sensor_outputs as *mut u8,
-        );
-    }
-
-    print_result(result, "Do Steps");
-
-    for i in 0..n_sensor_outputs as usize {
-        println!("{:?}", sensor_outputs.get(i));
-    }
+    bsec::do_steps(&mut bsec_state, &sensor_inputs);
 
     Ok(())
 }
