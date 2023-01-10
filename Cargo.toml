@@ -7,8 +7,14 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-regex = "1"
-chrono = "0.4"
+bme68x-rust = "0.1"
+embedded-hal = "0.2.7"
+linux-embedded-hal = "0.3"
+
+[dependencies.chrono]
+version = "0.4"
+default-features = false
+features = ["std", "clock"]
 
 [build-dependencies]
 bindgen = "0.63"

@@ -4,7 +4,9 @@
 #![allow(dead_code)]
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
+use bme::*;
 use chrono::Local;
+use std::path::Path;
 mod bme;
 mod bsec;
 
@@ -13,6 +15,31 @@ fn main() -> std::io::Result<()> {
     let time_now = Local::now().naive_local();
     println!("Time now is: {}", time_now);
 
+    let mut bme_state = bme::State::default();
+
+    for i in 0..9 {
+        let pathstring = format!("/dev/i2c-{}", i);
+        let path = Path::new(&pathstring);
+        match path.try_exists() {
+            Ok(result) => {
+                if result {
+                    bme_state.driver = Some(bme::create_device(path));
+                    break;
+                }
+            }
+            Err(_) => {}
+        }
+    }
+
+    if bme_state.driver.is_some() {
+        println!(
+            "Found i2c Device on {}",
+            bme_state.driver.unwrap().path.display()
+        );
+    } else {
+        println!("Cannot find i2c Device.");
+    }
+
     let mut bsec_state = bsec::State::default();
 
     bsec::get_version(&mut bsec_state);
@@ -20,7 +47,7 @@ fn main() -> std::io::Result<()> {
     bsec::init(&mut bsec_state);
 
     bsec::update_subscription(&mut bsec_state);
-    
+
     bsec::get_sensor_config(&mut bsec_state);
 
     let timestamp = Local::now().timestamp_nanos();
@@ -32,7 +59,11 @@ fn main() -> std::io::Result<()> {
             time_stamp: timestamp,
             signal: 0f32,
             signal_dimensions: 1,
-            sensor_id: bsec_state.required_sensor_settings.get(i).unwrap().sensor_id,
+            sensor_id: bsec_state
+                .required_sensor_settings
+                .get(i)
+                .unwrap()
+                .sensor_id,
         });
     }
 
