@@ -23,7 +23,9 @@ fn main() -> std::io::Result<()> {
         match path.try_exists() {
             Ok(result) => {
                 if result {
-                    bme_state.driver = Some(bme::create_device(path));
+                    println!("Found i2c Device on {}", path.display());
+                    let driver = bme::create_device(path);
+                    bme_state = bme::init(driver);
                     break;
                 }
             }
@@ -31,12 +33,7 @@ fn main() -> std::io::Result<()> {
         }
     }
 
-    if bme_state.driver.is_some() {
-        println!(
-            "Found i2c Device on {}",
-            bme_state.driver.unwrap().path.display()
-        );
-    } else {
+    if bme_state.driver.is_none() {
         println!("Cannot find i2c Device.");
     }
 

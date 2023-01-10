@@ -1,13 +1,13 @@
 use crate::*;
 use bme68x_rust::{CommInterface, Device, DeviceConfig, Error, Interface};
+use embedded_hal::blocking::i2c::{Read, Write};
 use linux_embedded_hal::I2cdev;
-use embedded_hal::blocking::i2c::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 #[derive(Default)]
 pub struct State {
-    pub driver: Option<I2cDriver>,
+    pub driver: Option<Device<I2cDriver>>,
     pub result: i8,
 }
 
@@ -24,6 +24,14 @@ pub fn create_device(path: &Path) -> I2cDriver {
     }
 }
 
+pub fn init(driver: I2cDriver) -> State {
+    let bme = Device::initialize(driver).expect("Cannot initialize device");
+    State {
+        driver: Some(bme),
+        result: 0,
+    }
+}
+
 impl Interface for I2cDriver {
     fn interface_type(&self) -> CommInterface {
         CommInterface::I2C
@@ -34,13 +42,16 @@ impl Interface for I2cDriver {
         std::thread::sleep(delay);
     }
 
-    fn read(&self, _reg_addr: u8, _reg_data: &mut [u8]) -> Result<(), Error> {
-        todo!()
-        // self.device.read(_reg_addr, _reg_data).map_err(|_| Error::CommunicationFailure)
+    fn read(&mut self, _reg_addr: u8, _reg_data: &mut [u8]) -> Result<(), Error> {
+        self.device
+            .read(_reg_addr, _reg_data)
+            .map_err(|_| Error::CommunicationFailure)
     }
 
-    fn write(&self, _reg_addr: u8, _reg_data: &[u8]) -> Result<(), Error> {
-        todo!()
+    fn write(&mut self, _reg_addr: u8, _reg_data: &[u8]) -> Result<(), Error> {
+        self.device
+            .write(_reg_addr, _reg_data)
+            .map_err(|_| Error::CommunicationFailure)
     }
 }
 
