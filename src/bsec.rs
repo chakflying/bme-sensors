@@ -112,7 +112,7 @@ pub fn do_steps(state: &mut State, inputs: &Vec<bsec_input_t>) {
     unsafe {
         state.result = bsec_do_steps(
             inputs.as_ptr(),
-            state.n_required_sensor_settings,
+            inputs.len() as u8,
             sensor_outputs.as_mut_ptr(),
             &mut n_sensor_outputs as *mut u8,
         );

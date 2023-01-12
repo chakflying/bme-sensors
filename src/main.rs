@@ -121,6 +121,8 @@ fn main() -> std::io::Result<()> {
                 bsec_physical_sensor_t::BSEC_INPUT_HUMIDITY => measure_results[0].humidity,
                 bsec_physical_sensor_t::BSEC_INPUT_TEMPERATURE => measure_results[0].temperature,
                 bsec_physical_sensor_t::BSEC_INPUT_GASRESISTOR => measure_results[0].gas_resistance,
+                bsec_physical_sensor_t::BSEC_INPUT_HEATSOURCE => 5f32,
+                bsec_physical_sensor_t::BSEC_INPUT_PROFILE_PART => measure_results[0].gas_index.into(),
                 _ => 0f32,
             };
 
