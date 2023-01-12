@@ -1,15 +1,10 @@
-use crate::*;
-use bme68x_rust::{CommInterface, Device, DeviceConfig, Error, Interface};
-use embedded_hal::blocking::i2c::{Read, Write};
+use bme68x_rust::{CommInterface, Device, Error as BmeError, Interface};
+use linux_embedded_hal::i2cdev::core::{I2CDevice, I2CTransfer};
+use linux_embedded_hal::i2cdev::linux::I2CMessage;
 use linux_embedded_hal::I2cdev;
+use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-
-#[derive(Default)]
-pub struct State {
-    pub driver: Option<Device<I2cDriver>>,
-    pub result: i8,
-}
 
 pub struct I2cDriver {
     pub path: PathBuf,
@@ -17,19 +12,18 @@ pub struct I2cDriver {
 }
 
 pub fn create_device(path: &Path) -> I2cDriver {
-    let device = I2cdev::new(path).expect("Failed to create device");
+    let mut device = I2cdev::new(path).expect("Failed to create device");
+    device
+        .set_slave_address(0x77)
+        .expect("Cannot set device address");
     I2cDriver {
         path: path.to_path_buf(),
         device: device,
     }
 }
 
-pub fn init(driver: I2cDriver) -> State {
-    let bme = Device::initialize(driver).expect("Cannot initialize device");
-    State {
-        driver: Some(bme),
-        result: 0,
-    }
+pub fn init(driver: I2cDriver) -> Device<I2cDriver> {
+    Device::initialize(driver).expect("Cannot initialize device")
 }
 
 impl Interface for I2cDriver {
@@ -42,23 +36,34 @@ impl Interface for I2cDriver {
         std::thread::sleep(delay);
     }
 
-    fn read(&mut self, _reg_addr: u8, _reg_data: &mut [u8]) -> Result<(), Error> {
-        self.device
-            .read(_reg_addr, _reg_data)
-            .map_err(|_| Error::CommunicationFailure)
+    fn read(&mut self, _reg_addr: u8, _reg_data: &mut [u8]) -> Result<(), BmeError> {
+        if _reg_data.len() > 32 {
+            let write_message = I2CMessage::write(&[_reg_addr]);
+            let read_message = I2CMessage::read(_reg_data);
+            self.device
+                .transfer(&mut [write_message, read_message])
+                .map(|_| ())
+                .map_err(|err| {
+                    println!("{}: {:#?}", err, err.source());
+                    BmeError::CommunicationFailure
+                })
+        } else {
+            self.device
+                .smbus_read_i2c_block_data(_reg_addr, _reg_data.len() as u8)
+                .map(|data| _reg_data.copy_from_slice(&data))
+                .map_err(|err| {
+                    println!("{}: {:#?}", err, err.source());
+                    BmeError::CommunicationFailure
+                })
+        }
     }
 
-    fn write(&mut self, _reg_addr: u8, _reg_data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _reg_addr: u8, _reg_data: &[u8]) -> Result<(), BmeError> {
         self.device
-            .write(_reg_addr, _reg_data)
-            .map_err(|_| Error::CommunicationFailure)
-    }
-}
-
-fn print_result(state: State, op_name: &str) {
-    if state.result == 0 {
-        println!("BME {}: OK", op_name);
-    } else {
-        println!("BME {}: Error {}", op_name, state.result);
+            .smbus_write_i2c_block_data(_reg_addr, _reg_data)
+            .map_err(|err| {
+                println!("{}: {:#?}", err, err.source());
+                BmeError::CommunicationFailure
+            })
     }
 }

@@ -5,7 +5,8 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 use bme::*;
-use chrono::Local;
+use bme68x_rust::{Device, DeviceConfig, Filter, GasHeaterConfig, Interface, Odr, OperationMode};
+use chrono::{DateTime, Local, NaiveDateTime};
 use std::path::Path;
 mod bme;
 mod bsec;
@@ -15,7 +16,7 @@ fn main() -> std::io::Result<()> {
     let time_now = Local::now().naive_local();
     println!("Time now is: {}", time_now);
 
-    let mut bme_state = bme::State::default();
+    let mut bme: Option<Device<I2cDriver>> = None;
 
     for i in 0..9 {
         let pathstring = format!("/dev/i2c-{}", i);
@@ -25,7 +26,7 @@ fn main() -> std::io::Result<()> {
                 if result {
                     println!("Found i2c Device on {}", path.display());
                     let driver = bme::create_device(path);
-                    bme_state = bme::init(driver);
+                    bme = Some(bme::init(driver));
                     break;
                 }
             }
@@ -33,9 +34,7 @@ fn main() -> std::io::Result<()> {
         }
     }
 
-    if bme_state.driver.is_none() {
-        println!("Cannot find i2c Device.");
-    }
+    let mut bme = bme.expect("Cannot find i2c Device.");
 
     let mut bsec_state = bsec::State::default();
 
@@ -45,26 +44,115 @@ fn main() -> std::io::Result<()> {
 
     bsec::update_subscription(&mut bsec_state);
 
-    bsec::get_sensor_config(&mut bsec_state);
+    for sample_count in 0..300 {
+        let start_timestamp = Local::now().timestamp_nanos();
 
-    let timestamp = Local::now().timestamp_nanos();
+        println!("{} - Calling at: {}", sample_count, Local::now());
 
-    let mut sensor_inputs = Vec::new();
+        bsec::get_sensor_config(&mut bsec_state, start_timestamp);
 
-    for i in 0..bsec_state.n_required_sensor_settings as usize {
-        sensor_inputs.push(bsec_input_t {
-            time_stamp: timestamp,
-            signal: 0f32,
-            signal_dimensions: 1,
-            sensor_id: bsec_state
+        bme.set_config(
+            DeviceConfig::default()
+                .filter(Filter::Off)
+                .odr(Odr::StandbyNone)
+                .oversample_humidity(unsafe {
+                    std::mem::transmute(bsec_state.sensor_settings.humidity_oversampling)
+                })
+                .oversample_temperature(unsafe {
+                    std::mem::transmute(bsec_state.sensor_settings.temperature_oversampling)
+                })
+                .oversample_pressure(unsafe {
+                    std::mem::transmute(bsec_state.sensor_settings.pressure_oversampling)
+                }),
+        )
+        .expect("failed setting config");
+
+        let mut heater_config = GasHeaterConfig::default()
+            .enable()
+            .heater_temp(bsec_state.sensor_settings.heater_temperature)
+            .heater_duration(bsec_state.sensor_settings.heater_duration)
+            .heater_temp_profile(
+                bsec_state
+                    .sensor_settings
+                    .heater_duration_profile
+                    .as_mut_ptr(),
+            )
+            .heater_dur_profile(
+                bsec_state
+                    .sensor_settings
+                    .heater_duration_profile
+                    .as_mut_ptr(),
+            );
+
+        let shared_duration = bme.get_measure_duration(OperationMode::Forced) as u16 / 1000;
+
+        heater_config = heater_config.heater_shared_duration(140 - shared_duration);
+
+        bme.set_gas_heater_conf(OperationMode::Forced, heater_config)
+            .expect("failed setting heater config");
+
+        // -------------------------------------------------------
+
+        bme.set_op_mode(OperationMode::Forced)
+            .expect("Failed setting operation mode");
+
+        let delay_period = bme.get_measure_duration(OperationMode::Forced)
+            + ((140 - shared_duration as u32) * 1000)
+            + 750000;
+        bme.interface.delay(delay_period);
+
+        let measure_results = bme
+            .get_data(OperationMode::Forced)
+            .expect("Failed getting measure results");
+
+        println!("{:?}", measure_results);
+
+        let mut sensor_inputs = Vec::new();
+
+        for i in 0..bsec_state.n_required_sensor_settings as usize {
+            let sensor_id = bsec_state
                 .required_sensor_settings
                 .get(i)
                 .unwrap()
-                .sensor_id,
-        });
-    }
+                .sensor_id;
 
-    bsec::do_steps(&mut bsec_state, &sensor_inputs);
+            let signal = match sensor_id as u32 {
+                bsec_physical_sensor_t::BSEC_INPUT_PRESSURE => measure_results[0].pressure,
+                bsec_physical_sensor_t::BSEC_INPUT_HUMIDITY => measure_results[0].humidity,
+                bsec_physical_sensor_t::BSEC_INPUT_TEMPERATURE => measure_results[0].temperature,
+                bsec_physical_sensor_t::BSEC_INPUT_GASRESISTOR => measure_results[0].gas_resistance,
+                _ => 0f32,
+            };
+
+            sensor_inputs.push(bsec_input_t {
+                time_stamp: start_timestamp,
+                signal: signal,
+                signal_dimensions: 1,
+                sensor_id: sensor_id,
+            });
+        }
+
+        bsec::do_steps(&mut bsec_state, &sensor_inputs);
+
+        // ---------------------------------------------
+
+        let next_call = bsec_state.sensor_settings.next_call;
+        let wait_time = next_call - Local::now().timestamp_nanos();
+
+        // println!(
+        //     "Next call time: {}",
+        //     NaiveDateTime::from_timestamp_opt(
+        //         next_call / 1000 / 1000 / 1000,
+        //         (next_call % 1000000000) as u32
+        //     )
+        //     .unwrap()
+        //     .and_local_timezone(Local::now().timezone())
+        //     .unwrap()
+        // );
+        println!("Sleeping for: {} ms", wait_time / 1000 / 1000);
+
+        bme.interface.delay(wait_time as u32 / 1000 - 500);
+    }
 
     Ok(())
 }

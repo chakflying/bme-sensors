@@ -1,1 +1,3 @@
 /target
+*/**/.cargo-ok
+lib/lib/bme68x.o

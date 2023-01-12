@@ -1,7 +1,5 @@
 use crate::*;
 
-use chrono::Local;
-
 #[derive(Default)]
 pub struct State {
     pub result: i32,
@@ -40,25 +38,33 @@ pub fn init(state: &mut State) {
 }
 
 pub fn update_subscription(state: &mut State) {
-    state.requested_virtual_sensors.push(bsec_sensor_configuration_t {
-        sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
-        sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_STATIC_IAQ as u8,
-    });
+    state
+        .requested_virtual_sensors
+        .push(bsec_sensor_configuration_t {
+            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
+            sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_STATIC_IAQ as u8,
+        });
 
-    state.requested_virtual_sensors.push(bsec_sensor_configuration_t {
-        sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
-        sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE as u8,
-    });
+    state
+        .requested_virtual_sensors
+        .push(bsec_sensor_configuration_t {
+            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
+            sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE as u8,
+        });
 
-    state.requested_virtual_sensors.push(bsec_sensor_configuration_t {
-        sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
-        sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY as u8,
-    });
+    state
+        .requested_virtual_sensors
+        .push(bsec_sensor_configuration_t {
+            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
+            sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY as u8,
+        });
 
-    state.requested_virtual_sensors.push(bsec_sensor_configuration_t {
-        sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
-        sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_STABILIZATION_STATUS as u8,
-    });
+    state
+        .requested_virtual_sensors
+        .push(bsec_sensor_configuration_t {
+            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
+            sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_STABILIZATION_STATUS as u8,
+        });
 
     for _ in 0..BSEC_MAX_PHYSICAL_SENSOR {
         state
@@ -83,16 +89,16 @@ pub fn update_subscription(state: &mut State) {
     print_result(state, "Update Subscription");
 }
 
-pub fn get_sensor_config(state: &mut State) {
+pub fn get_sensor_config(state: &mut State, timestamp: i64) {
     unsafe {
         state.result = bsec_sensor_control(
-            Local::now().timestamp_nanos(),
+            timestamp,
             &mut state.sensor_settings as *mut bsec_bme_settings_t,
         );
     }
 
     print_result(state, "Sensor Control");
-    println!("{:?}", state.sensor_settings);
+    // println!("{:?}", state.sensor_settings);
 }
 
 pub fn do_steps(state: &mut State, inputs: &Vec<bsec_input_t>) {
@@ -115,7 +121,24 @@ pub fn do_steps(state: &mut State, inputs: &Vec<bsec_input_t>) {
     print_result(state, "Do Steps");
 
     for i in 0..n_sensor_outputs as usize {
-        println!("{:?}", sensor_outputs.get(i));
+        let output = sensor_outputs[i];
+        match output.sensor_id as u32 {
+            bsec_virtual_sensor_t::BSEC_OUTPUT_STATIC_IAQ => {
+                println!("Static IAQ: {}", output.signal);
+            }
+            bsec_virtual_sensor_t::BSEC_OUTPUT_STABILIZATION_STATUS => {
+                println!("Gas sensor stable: {}", output.signal == 1.0);
+            }
+            bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE => {
+                println!("Temperature: {}", output.signal);
+            }
+            bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY => {
+                println!("Humidity: {}", output.signal);
+            }
+            _ => {
+                println!("{:?}", output);
+            }
+        }
     }
 }
 
