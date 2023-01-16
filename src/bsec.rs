@@ -66,6 +66,20 @@ pub fn update_subscription(state: &mut State) {
             sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_STABILIZATION_STATUS as u8,
         });
 
+    state
+        .requested_virtual_sensors
+        .push(bsec_sensor_configuration_t {
+            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
+            sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_PRESSURE as u8,
+        });
+
+    state
+        .requested_virtual_sensors
+        .push(bsec_sensor_configuration_t {
+            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
+            sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_BREATH_VOC_EQUIVALENT as u8,
+        });
+
     for _ in 0..BSEC_MAX_PHYSICAL_SENSOR {
         state
             .required_sensor_settings
@@ -135,10 +149,48 @@ pub fn do_steps(state: &mut State, inputs: &Vec<bsec_input_t>) {
             bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY => {
                 println!("Humidity: {}", output.signal);
             }
+            bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_PRESSURE => {
+                println!("Air Pressure: {}", output.signal);
+            }
+            bsec_virtual_sensor_t::BSEC_OUTPUT_BREATH_VOC_EQUIVALENT => {
+                println!("Breath VOC [ppm]: {}", output.signal);
+            }
             _ => {
                 println!("{:?}", output);
             }
         }
+    }
+}
+
+pub fn get_bsec_state() -> Vec<u8> {
+    let mut serialized_state: Vec<u8> = vec![0; BSEC_MAX_STATE_BLOB_SIZE as usize];
+    let mut work_buffer_state: Vec<u8> = vec![0; BSEC_MAX_WORKBUFFER_SIZE as usize];
+    let mut n_serialized_state: u32 = 0;
+
+    unsafe {
+        bsec_get_state(
+            0,
+            serialized_state.as_mut_ptr(),
+            BSEC_MAX_STATE_BLOB_SIZE,
+            work_buffer_state.as_mut_ptr(),
+            BSEC_MAX_WORKBUFFER_SIZE,
+            &mut n_serialized_state as *mut u32,
+        );
+    }
+
+    serialized_state[0..n_serialized_state as usize].into()
+}
+
+pub fn set_bsec_state(serialized_state: Vec<u8>) {
+    let mut work_buffer_state: Vec<u8> = vec![0; BSEC_MAX_WORKBUFFER_SIZE as usize];
+
+    unsafe {
+        bsec_set_state(
+            serialized_state.as_ptr(),
+            serialized_state.len() as u32,
+            work_buffer_state.as_mut_ptr(),
+            BSEC_MAX_WORKBUFFER_SIZE,
+        );
     }
 }
 

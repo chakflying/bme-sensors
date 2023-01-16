@@ -7,7 +7,9 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 use bme::*;
 use bme68x_rust::{Device, DeviceConfig, Filter, GasHeaterConfig, Interface, Odr, OperationMode};
 use chrono::{DateTime, Local, NaiveDateTime};
+use std::fs;
 use std::path::Path;
+use std::sync::mpsc::channel;
 mod bme;
 mod bsec;
 
@@ -15,6 +17,22 @@ fn main() -> std::io::Result<()> {
     println!("Hello World!");
     let time_now = Local::now().naive_local();
     println!("Time now is: {}", time_now);
+
+    let mut run_loop = true;
+
+    let (tx, rx) = channel();
+
+    ctrlc::set_handler(move || {
+        let serialized_state = bsec::get_bsec_state();
+
+        fs::write("last_state.bin", serialized_state)
+            .map(|_| println!("BSEC state saved."))
+            .unwrap_or_else(|_| println!("Error saving BSEC state."));
+
+        tx.send(0)
+            .unwrap_or_else(|_| println!("Failed to signal termination."));
+    })
+    .expect("Error setting Ctrl-C handler");
 
     let mut bme: Option<Device<I2cDriver>> = None;
 
@@ -42,18 +60,30 @@ fn main() -> std::io::Result<()> {
 
     bsec::init(&mut bsec_state);
 
+    let last_state = fs::read("last_state.bin").ok();
+    
+    match last_state {
+        Some(serialized_state) => {
+            bsec::set_bsec_state(serialized_state);
+        }
+        None => {
+            println!("Last BSEC state not found.");
+
+        }
+    }
+
     bsec::update_subscription(&mut bsec_state);
 
-    for sample_count in 0..300 {
+    while run_loop {
         let start_timestamp = Local::now().timestamp_nanos();
 
-        println!("{} - Calling at: {}", sample_count, Local::now());
+        println!("Calling at: {}", Local::now());
 
         bsec::get_sensor_config(&mut bsec_state, start_timestamp);
 
         bme.set_config(
             DeviceConfig::default()
-                .filter(Filter::Off)
+                .filter(Filter::Size3)
                 .odr(Odr::StandbyNone)
                 .oversample_humidity(unsafe {
                     std::mem::transmute(bsec_state.sensor_settings.humidity_oversampling)
@@ -122,7 +152,9 @@ fn main() -> std::io::Result<()> {
                 bsec_physical_sensor_t::BSEC_INPUT_TEMPERATURE => measure_results[0].temperature,
                 bsec_physical_sensor_t::BSEC_INPUT_GASRESISTOR => measure_results[0].gas_resistance,
                 bsec_physical_sensor_t::BSEC_INPUT_HEATSOURCE => 5f32,
-                bsec_physical_sensor_t::BSEC_INPUT_PROFILE_PART => measure_results[0].gas_index.into(),
+                bsec_physical_sensor_t::BSEC_INPUT_PROFILE_PART => {
+                    measure_results[0].gas_index.into()
+                }
                 _ => 0f32,
             };
 
@@ -154,6 +186,13 @@ fn main() -> std::io::Result<()> {
         println!("Sleeping for: {} ms", wait_time / 1000 / 1000);
 
         bme.interface.delay(wait_time as u32 / 1000 - 500);
+
+        rx.try_recv()
+            .and_then(|_| {
+                run_loop = false;
+                Ok(())
+            })
+            .ok();
     }
 
     Ok(())
