@@ -115,7 +115,7 @@ pub fn get_sensor_config(state: &mut State, timestamp: i64) {
     // println!("{:?}", state.sensor_settings);
 }
 
-pub fn do_steps(state: &mut State, inputs: &Vec<bsec_input_t>) {
+pub fn do_steps(state: &mut State, inputs: &Vec<bsec_input_t>) -> Vec<bsec_output_t> {
     let mut sensor_outputs = Vec::new();
     let mut n_sensor_outputs: u8 = state.requested_virtual_sensors.len() as u8;
 
@@ -160,6 +160,8 @@ pub fn do_steps(state: &mut State, inputs: &Vec<bsec_input_t>) {
             }
         }
     }
+
+    sensor_outputs[0..n_sensor_outputs as usize].into()
 }
 
 pub fn get_bsec_state() -> Vec<u8> {

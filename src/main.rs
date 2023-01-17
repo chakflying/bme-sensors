@@ -6,12 +6,15 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 use bme::*;
 use bme68x_rust::{Device, DeviceConfig, Filter, GasHeaterConfig, Interface, Odr, OperationMode};
-use chrono::{DateTime, Local, NaiveDateTime};
+use chrono::Local;
+use std::cmp::max;
 use std::fs;
 use std::path::Path;
 use std::sync::mpsc::channel;
+use std::time::Duration;
 mod bme;
 mod bsec;
+mod graphite;
 
 fn main() -> std::io::Result<()> {
     println!("Hello World!");
@@ -54,6 +57,8 @@ fn main() -> std::io::Result<()> {
 
     let mut bme = bme.expect("Cannot find i2c Device.");
 
+    let mut graphite_state = graphite::init().expect("Failed to connect to graphite");
+
     let mut bsec_state = bsec::State::default();
 
     bsec::get_version(&mut bsec_state);
@@ -61,14 +66,13 @@ fn main() -> std::io::Result<()> {
     bsec::init(&mut bsec_state);
 
     let last_state = fs::read("last_state.bin").ok();
-    
+
     match last_state {
         Some(serialized_state) => {
             bsec::set_bsec_state(serialized_state);
         }
         None => {
             println!("Last BSEC state not found.");
-
         }
     }
 
@@ -131,47 +135,92 @@ fn main() -> std::io::Result<()> {
             + 750000;
         bme.interface.delay(delay_period);
 
-        let measure_results = bme
-            .get_data(OperationMode::Forced)
-            .expect("Failed getting measure results");
+        let measure_results = bme.get_data(OperationMode::Forced);
 
-        println!("{:?}", measure_results);
+        if measure_results.is_ok() {
+            let measure_results = measure_results.unwrap();
 
-        let mut sensor_inputs = Vec::new();
+            println!("{:?}", measure_results);
 
-        for i in 0..bsec_state.n_required_sensor_settings as usize {
-            let sensor_id = bsec_state
-                .required_sensor_settings
-                .get(i)
-                .unwrap()
-                .sensor_id;
+            let mut sensor_inputs = Vec::new();
 
-            let signal = match sensor_id as u32 {
-                bsec_physical_sensor_t::BSEC_INPUT_PRESSURE => measure_results[0].pressure,
-                bsec_physical_sensor_t::BSEC_INPUT_HUMIDITY => measure_results[0].humidity,
-                bsec_physical_sensor_t::BSEC_INPUT_TEMPERATURE => measure_results[0].temperature,
-                bsec_physical_sensor_t::BSEC_INPUT_GASRESISTOR => measure_results[0].gas_resistance,
-                bsec_physical_sensor_t::BSEC_INPUT_HEATSOURCE => 5f32,
-                bsec_physical_sensor_t::BSEC_INPUT_PROFILE_PART => {
-                    measure_results[0].gas_index.into()
-                }
-                _ => 0f32,
-            };
+            for i in 0..bsec_state.n_required_sensor_settings as usize {
+                let sensor_id = bsec_state
+                    .required_sensor_settings
+                    .get(i)
+                    .unwrap()
+                    .sensor_id;
 
-            sensor_inputs.push(bsec_input_t {
-                time_stamp: start_timestamp,
-                signal: signal,
-                signal_dimensions: 1,
-                sensor_id: sensor_id,
-            });
+                let signal = match sensor_id as u32 {
+                    bsec_physical_sensor_t::BSEC_INPUT_PRESSURE => measure_results[0].pressure,
+                    bsec_physical_sensor_t::BSEC_INPUT_HUMIDITY => measure_results[0].humidity,
+                    bsec_physical_sensor_t::BSEC_INPUT_TEMPERATURE => {
+                        measure_results[0].temperature
+                    }
+                    bsec_physical_sensor_t::BSEC_INPUT_GASRESISTOR => {
+                        measure_results[0].gas_resistance
+                    }
+                    bsec_physical_sensor_t::BSEC_INPUT_HEATSOURCE => 5f32,
+                    bsec_physical_sensor_t::BSEC_INPUT_PROFILE_PART => {
+                        measure_results[0].gas_index.into()
+                    }
+                    _ => 0f32,
+                };
+
+                sensor_inputs.push(bsec_input_t {
+                    time_stamp: start_timestamp,
+                    signal: signal,
+                    signal_dimensions: 1,
+                    sensor_id: sensor_id,
+                });
+            }
+
+            let sensor_outputs = bsec::do_steps(&mut bsec_state, &sensor_inputs);
+
+            let mut metrics_string = String::from("");
+            for sensor in sensor_outputs {
+                let metric_name = match sensor.sensor_id as u32 {
+                    bsec_virtual_sensor_t::BSEC_OUTPUT_STATIC_IAQ => "study.iaq",
+                    bsec_virtual_sensor_t::BSEC_OUTPUT_STABILIZATION_STATUS => "study.stable",
+                    bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE => {
+                        "study.temperature"
+                    }
+                    bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY => {
+                        "study.humidity"
+                    }
+                    bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_PRESSURE => "study.pressure",
+                    bsec_virtual_sensor_t::BSEC_OUTPUT_BREATH_VOC_EQUIVALENT => "study.voc",
+                    _ => "study.unknown",
+                };
+                metrics_string.push_str(&*format!(
+                    "{} {} {}\n",
+                    metric_name,
+                    sensor.signal,
+                    start_timestamp / 1000 / 1000 / 1000
+                ));
+            }
+
+            graphite::send_metrics(&mut graphite_state, metrics_string)
+                .err()
+                .map(|e| {
+                    println!("Failed to send metrics: {}", e);
+                    loop {
+                        match graphite_state.reconnect() {
+                            Ok(_) => {
+                                break;
+                            }
+                            Err(_) => std::thread::sleep(Duration::from_micros(500000)),
+                        }
+                    }
+                });
+        } else {
+            println!("No measure results received: {:?}", measure_results.err());
         }
-
-        bsec::do_steps(&mut bsec_state, &sensor_inputs);
 
         // ---------------------------------------------
 
         let next_call = bsec_state.sensor_settings.next_call;
-        let wait_time = next_call - Local::now().timestamp_nanos();
+        let wait_time = max(1, (next_call - Local::now().timestamp_nanos()) / 1000 - 500);
 
         // println!(
         //     "Next call time: {}",
@@ -183,9 +232,9 @@ fn main() -> std::io::Result<()> {
         //     .and_local_timezone(Local::now().timezone())
         //     .unwrap()
         // );
-        println!("Sleeping for: {} ms", wait_time / 1000 / 1000);
+        println!("Sleeping for: {} ms", wait_time / 1000);
 
-        bme.interface.delay(wait_time as u32 / 1000 - 500);
+        bme.interface.delay(wait_time as u32);
 
         rx.try_recv()
             .and_then(|_| {
