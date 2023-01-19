@@ -1,3 +1,5 @@
 /target
 */**/.cargo-ok
 lib/lib/bme68x.o
+last_state.bin
+.env

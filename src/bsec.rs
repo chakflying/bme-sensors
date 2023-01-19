@@ -1,3 +1,5 @@
+use bme68x_rust::SensorData;
+
 use crate::*;
 
 #[derive(Default)]
@@ -21,7 +23,7 @@ pub fn get_version(state: &mut State) -> bsec_version_t {
         state.result = bsec_get_version(&mut version as *mut bsec_version_t);
     }
 
-    println!(
+    info!(
         "BSEC Version: {}.{}.{}",
         version.major, version.minor, version.major_bugfix
     );
@@ -37,48 +39,63 @@ pub fn init(state: &mut State) {
     print_result(state, "Init");
 }
 
-pub fn update_subscription(state: &mut State) {
+pub fn update_subscription(state: &mut State, mode: f32) {
     state
         .requested_virtual_sensors
         .push(bsec_sensor_configuration_t {
-            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
-            sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_STATIC_IAQ as u8,
-        });
-
-    state
-        .requested_virtual_sensors
-        .push(bsec_sensor_configuration_t {
-            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
+            sample_rate: mode,
             sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE as u8,
         });
 
     state
         .requested_virtual_sensors
         .push(bsec_sensor_configuration_t {
-            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
+            sample_rate: mode,
             sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY as u8,
         });
 
     state
         .requested_virtual_sensors
         .push(bsec_sensor_configuration_t {
-            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
+            sample_rate: mode,
             sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_STABILIZATION_STATUS as u8,
         });
 
     state
         .requested_virtual_sensors
         .push(bsec_sensor_configuration_t {
-            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
+            sample_rate: mode,
             sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_PRESSURE as u8,
         });
 
-    state
-        .requested_virtual_sensors
-        .push(bsec_sensor_configuration_t {
-            sample_rate: BSEC_SAMPLE_RATE_CONT as f32,
-            sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_BREATH_VOC_EQUIVALENT as u8,
-        });
+    if mode == BSEC_SAMPLE_RATE_LP as f32 {
+        state
+            .requested_virtual_sensors
+            .push(bsec_sensor_configuration_t {
+                sample_rate: mode,
+                sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_STATIC_IAQ as u8,
+            });
+        state
+            .requested_virtual_sensors
+            .push(bsec_sensor_configuration_t {
+                sample_rate: mode,
+                sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_BREATH_VOC_EQUIVALENT as u8,
+            });
+    } else if mode == BSEC_SAMPLE_RATE_SCAN as f32 {
+        state
+            .requested_virtual_sensors
+            .push(bsec_sensor_configuration_t {
+                sample_rate: mode,
+                sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_GAS_ESTIMATE_1 as u8,
+            });
+
+        state
+            .requested_virtual_sensors
+            .push(bsec_sensor_configuration_t {
+                sample_rate: mode,
+                sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_GAS_ESTIMATE_2 as u8,
+            });
+    }
 
     for _ in 0..BSEC_MAX_PHYSICAL_SENSOR {
         state
@@ -101,6 +118,10 @@ pub fn update_subscription(state: &mut State) {
     }
 
     print_result(state, "Update Subscription");
+    debug!(
+        "Required Sensor Settings: {:#?}",
+        state.required_sensor_settings
+    );
 }
 
 pub fn get_sensor_config(state: &mut State, timestamp: i64) {
@@ -112,7 +133,71 @@ pub fn get_sensor_config(state: &mut State, timestamp: i64) {
     }
 
     print_result(state, "Sensor Control");
-    // println!("{:?}", state.sensor_settings);
+    debug!("Sensor Settings: {:?}", state.sensor_settings);
+}
+
+pub fn process_data(
+    state: &State,
+    measure_results: &SensorData,
+    timestamp: i64,
+) -> Vec<bsec_input_t> {
+    let mut sensor_inputs = Vec::new();
+
+    sensor_inputs.push(bsec_input_t {
+        time_stamp: timestamp,
+        signal: 5f32,
+        signal_dimensions: 1,
+        sensor_id: bsec_physical_sensor_t::BSEC_INPUT_HEATSOURCE as u8,
+    });
+
+    // Pressure
+    if state.sensor_settings.process_data & 0b1 == 0b1 {
+        sensor_inputs.push(bsec_input_t {
+            time_stamp: timestamp,
+            signal: measure_results.pressure,
+            signal_dimensions: 1,
+            sensor_id: bsec_physical_sensor_t::BSEC_INPUT_PRESSURE as u8,
+        });
+    }
+
+    // Humidity
+    if state.sensor_settings.process_data & 0b10 == 0b10 {
+        sensor_inputs.push(bsec_input_t {
+            time_stamp: timestamp,
+            signal: measure_results.humidity,
+            signal_dimensions: 1,
+            sensor_id: bsec_physical_sensor_t::BSEC_INPUT_HUMIDITY as u8,
+        });
+    }
+
+    // Temperature
+    if state.sensor_settings.process_data & 0b100 == 0b100 {
+        sensor_inputs.push(bsec_input_t {
+            time_stamp: timestamp,
+            signal: measure_results.temperature,
+            signal_dimensions: 1,
+            sensor_id: bsec_physical_sensor_t::BSEC_INPUT_TEMPERATURE as u8,
+        });
+    }
+
+    // Gas
+    if state.sensor_settings.process_data & 0b1000 == 0b1000 {
+        sensor_inputs.push(bsec_input_t {
+            time_stamp: timestamp,
+            signal: measure_results.gas_resistance,
+            signal_dimensions: 1,
+            sensor_id: bsec_physical_sensor_t::BSEC_INPUT_GASRESISTOR as u8,
+        });
+
+        sensor_inputs.push(bsec_input_t {
+            time_stamp: timestamp,
+            signal: measure_results.gas_index.into(),
+            signal_dimensions: 1,
+            sensor_id: bsec_physical_sensor_t::BSEC_INPUT_PROFILE_PART as u8,
+        });
+    }
+
+    sensor_inputs
 }
 
 pub fn do_steps(state: &mut State, inputs: &Vec<bsec_input_t>) -> Vec<bsec_output_t> {
@@ -138,25 +223,28 @@ pub fn do_steps(state: &mut State, inputs: &Vec<bsec_input_t>) -> Vec<bsec_outpu
         let output = sensor_outputs[i];
         match output.sensor_id as u32 {
             bsec_virtual_sensor_t::BSEC_OUTPUT_STATIC_IAQ => {
-                println!("Static IAQ: {}", output.signal);
+                debug!("Static IAQ: {}", output.signal);
             }
             bsec_virtual_sensor_t::BSEC_OUTPUT_STABILIZATION_STATUS => {
-                println!("Gas sensor stable: {}", output.signal == 1.0);
+                debug!("Gas sensor stable: {}", output.signal == 1.0);
             }
             bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE => {
-                println!("Temperature: {}", output.signal);
+                debug!("Temperature: {}", output.signal);
             }
             bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY => {
-                println!("Humidity: {}", output.signal);
+                debug!("Humidity: {}", output.signal);
             }
             bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_PRESSURE => {
-                println!("Air Pressure: {}", output.signal);
+                debug!("Air Pressure: {}", output.signal);
             }
             bsec_virtual_sensor_t::BSEC_OUTPUT_BREATH_VOC_EQUIVALENT => {
-                println!("Breath VOC [ppm]: {}", output.signal);
+                debug!("Breath VOC [ppm]: {}", output.signal);
+            }
+            bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_GAS_INDEX => {
+                debug!("Gas Index: {}", output.signal);
             }
             _ => {
-                println!("{:?}", output);
+                debug!("{:?}", output);
             }
         }
     }
@@ -198,8 +286,8 @@ pub fn set_bsec_state(serialized_state: Vec<u8>) {
 
 fn print_result(state: &State, op_name: &str) {
     if state.result == 0 {
-        println!("BSEC {}: OK", op_name);
+        info!("BSEC {}: OK", op_name);
     } else {
-        println!("BSEC {}: Error {}", op_name, state.result);
+        error!("BSEC {}: Error {}", op_name, state.result);
     }
 }

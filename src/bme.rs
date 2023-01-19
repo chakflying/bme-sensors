@@ -37,25 +37,15 @@ impl Interface for I2cDriver {
     }
 
     fn read(&mut self, _reg_addr: u8, _reg_data: &mut [u8]) -> Result<(), BmeError> {
-        if _reg_data.len() > 32 {
-            let write_message = I2CMessage::write(&[_reg_addr]);
-            let read_message = I2CMessage::read(_reg_data);
-            self.device
-                .transfer(&mut [write_message, read_message])
-                .map(|_| ())
-                .map_err(|err| {
-                    println!("{}: {:#?}", err, err.source());
-                    BmeError::CommunicationFailure
-                })
-        } else {
-            self.device
-                .smbus_read_i2c_block_data(_reg_addr, _reg_data.len() as u8)
-                .map(|data| _reg_data.copy_from_slice(&data))
-                .map_err(|err| {
-                    println!("{}: {:#?}", err, err.source());
-                    BmeError::CommunicationFailure
-                })
-        }
+        let write_message = I2CMessage::write(&[_reg_addr]);
+        let read_message = I2CMessage::read(_reg_data);
+        self.device
+            .transfer(&mut [write_message, read_message])
+            .map(|_| ())
+            .map_err(|err| {
+                println!("{}: {:#?}", err, err.source());
+                BmeError::CommunicationFailure
+            })
     }
 
     fn write(&mut self, _reg_addr: u8, _reg_data: &[u8]) -> Result<(), BmeError> {

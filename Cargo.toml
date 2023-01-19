@@ -11,6 +11,9 @@ bme68x-rust = { git = "https://github.com/chakflying/bme68x-rust" }
 embedded-hal = "0.2.7"
 linux-embedded-hal = "0.3"
 ctrlc = "3.2.4"
+log = "0.4"
+env_logger = "0.10"
+dotenvy = "0.15"
 
 [dependencies.chrono]
 version = "0.4"
