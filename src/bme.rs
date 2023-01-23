@@ -33,7 +33,7 @@ impl Interface for I2cDriver {
 
     fn delay(&self, period: u32) {
         let delay = Duration::from_micros(period as u64);
-        std::thread::sleep(delay);
+        spin_sleep::sleep(delay);
     }
 
     fn read(&mut self, _reg_addr: u8, _reg_data: &mut [u8]) -> Result<(), BmeError> {

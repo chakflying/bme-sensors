@@ -15,7 +15,7 @@ use std::cmp::max;
 use std::path::Path;
 use std::sync::mpsc::channel;
 use std::time::Duration;
-use std::{fs, thread, env};
+use std::{fs, env};
 mod bme;
 mod bsec;
 mod graphite;
@@ -171,7 +171,7 @@ fn main() -> std::io::Result<()> {
                             Ok(_) => {
                                 break;
                             }
-                            Err(_) => thread::sleep(Duration::from_micros(500000)),
+                            Err(_) => spin_sleep::sleep(Duration::from_micros(500000)),
                         }
                     }
                 });
@@ -195,7 +195,7 @@ fn main() -> std::io::Result<()> {
         let wait_time = max(1, (next_call - Local::now().timestamp_nanos()) / 1000 - 700);
         info!("Sleeping for: {} ms", wait_time / 1000);
 
-        thread::sleep(Duration::from_micros(wait_time as u64));
+        spin_sleep::sleep(Duration::from_micros(wait_time as u64));
 
         rx.try_recv()
             .and_then(|_| {
