@@ -192,7 +192,7 @@ fn main() -> std::io::Result<()> {
             .unwrap()
         );
 
-        let wait_time = max(1, (next_call - Local::now().timestamp_nanos()) / 1000 - 700);
+        let wait_time = max(1, (next_call - Local::now().timestamp_nanos()) / 1000 - 200);
         info!("Sleeping for: {} ms", wait_time / 1000);
 
         spin_sleep::sleep(Duration::from_micros(wait_time as u64));
