@@ -29,3 +29,19 @@ The Graphite server location is configured via environment variables. You can al
 ```shell
 GRAHITE_URL=your-grahite-server:2003
 ```
+
+## Usage
+
+Build the program in release mode:
+
+```shell
+cargo build --release
+```
+
+Then the CLI program can be run in the background with:
+
+```shell
+nohup {project folder}/target/release/bme-sensors & disown
+```
+
+You can also setup a systemd service such that it runs on startup.
