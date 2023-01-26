@@ -4,17 +4,11 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    cc::Build::new()
-        .file("./lib/bme68x.c")
-        .out_dir("./lib/")
-        .compile("bme68x");
-
     // Tell cargo to look for shared libraries in the specified directory
     println!("cargo:rustc-link-search=./lib");
 
     // Tell cargo to tell rustc to link the library.
     println!("cargo:rustc-link-lib=static=algobsec");
-    println!("cargo:rustc-link-lib=static=bme68x");
 
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
