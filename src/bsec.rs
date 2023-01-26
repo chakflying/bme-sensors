@@ -5,6 +5,7 @@ use crate::*;
 #[derive(Default)]
 pub struct State {
     pub result: i32,
+    pub mode: f32,
     pub requested_virtual_sensors: Vec<bsec_sensor_configuration_t>,
     pub required_sensor_settings: Vec<bsec_sensor_configuration_t>,
     pub n_required_sensor_settings: u8,
@@ -40,6 +41,8 @@ pub fn init(state: &mut State) {
 }
 
 pub fn update_subscription(state: &mut State, mode: f32) {
+    state.mode = mode;
+
     state
         .requested_virtual_sensors
         .push(bsec_sensor_configuration_t {
@@ -143,9 +146,15 @@ pub fn process_data(
 ) -> Vec<bsec_input_t> {
     let mut sensor_inputs = Vec::new();
 
+    let temp_compensation = if state.mode == BSEC_SAMPLE_RATE_LP as f32 {
+        3f32
+    } else {
+        5f32
+    };
+
     sensor_inputs.push(bsec_input_t {
         time_stamp: timestamp,
-        signal: 5f32,
+        signal: temp_compensation,
         signal_dimensions: 1,
         sensor_id: bsec_physical_sensor_t::BSEC_INPUT_HEATSOURCE as u8,
     });
