@@ -147,7 +147,7 @@ pub fn process_data(
     let mut sensor_inputs = Vec::new();
 
     let temp_compensation = if state.mode == BSEC_SAMPLE_RATE_LP as f32 {
-        3f32
+        2f32
     } else {
         5f32
     };
