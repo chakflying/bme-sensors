@@ -41,7 +41,25 @@ cargo build --release
 Then the CLI program can be run in the background with:
 
 ```shell
-nohup {project folder}/target/release/bme-sensors & disown
+nohup {project directory}/target/release/bme-sensors & disown
 ```
 
 You can also setup a systemd service such that it runs on startup.
+
+```shell
+[Unit]
+Description=BME Sensors service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=<current-user>
+WorkingDirectory=/<project directory>
+ExecStart=/<project directory>/target/release/bme-sensors
+
+[Install]
+WantedBy=multi-user.target
+```
