@@ -35,7 +35,7 @@ fn main() -> std::io::Result<()> {
     let (data_tx, data_rx) = channel::<String>();
 
     thread::spawn(move || {
-        let graphite_url = env::var("GRAHITE_URL").expect("Missing config for GRAHITE_URL");
+        let graphite_url = env::var("GRAPHITE_URL").expect("Missing config for GRAPHITE_URL");
 
         let mut graphite_state =
             graphite::init(graphite_url.as_str()).expect("Failed to connect to graphite");

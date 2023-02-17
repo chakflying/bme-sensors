@@ -27,7 +27,7 @@ This combines the BSEC library from Bosch and `bme68x-rust` to read and process 
 The Graphite server location is configured via environment variables. You can also create file `.env` in the project root, and input the graphite server location:
 
 ```shell
-GRAHITE_URL=your-grahite-server:2003
+GRAPHITE_URL=your-grahite-server:2003
 ```
 
 ## Usage
