@@ -57,7 +57,7 @@ pub fn build_output(sensor_outputs: Vec<bsec_output_t>, timestamp: i64) -> Strin
     metrics_string
 }
 
-pub fn send_metrics(state: &mut State, metrics: String) -> Result<(), Error> {
+pub fn send_metrics(state: &mut State, metrics: &str) -> Result<(), Error> {
     match state.connection.as_mut() {
         Some(connection) => {
             connection.write(metrics.as_bytes())?;

@@ -2,6 +2,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(dead_code)]
+#![allow(unused_must_use)]
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 #[macro_use]
@@ -15,7 +16,7 @@ use std::cmp::max;
 use std::path::Path;
 use std::sync::mpsc::channel;
 use std::time::Duration;
-use std::{fs, env};
+use std::{env, fs, thread};
 mod bme;
 mod bsec;
 mod graphite;
@@ -29,19 +30,39 @@ fn main() -> std::io::Result<()> {
 
     let mut run_loop = true;
 
-    let (tx, rx) = channel();
+    // Setup new thread to send data to server
 
-    ctrlc::set_handler(move || {
-        let serialized_state = bsec::get_bsec_state();
+    let (data_tx, data_rx) = channel::<String>();
 
-        fs::write("last_state.bin", serialized_state)
-            .map(|_| info!("BSEC state saved."))
-            .unwrap_or_else(|_| warn!("Error saving BSEC state."));
+    thread::spawn(move || {
+        let graphite_url = env::var("GRAHITE_URL").expect("Missing config for GRAHITE_URL");
 
-        tx.send(0)
-            .unwrap_or_else(|_| error!("Failed to signal termination."));
-    })
-    .expect("Error setting Ctrl-C handler");
+        let mut graphite_state =
+            graphite::init(graphite_url.as_str()).expect("Failed to connect to graphite");
+
+        loop {
+            let data_res = data_rx.try_recv();
+            match data_res {
+                Ok(data) => loop {
+                    let send_res = graphite::send_metrics(&mut graphite_state, data.as_str());
+                    match send_res {
+                        Ok(_) => {
+                            debug!("data sent successfully");
+                            break;
+                        }
+                        Err(e) => {
+                            error!("Failed to send metrics: {}", e);
+                            spin_sleep::sleep(Duration::from_micros(500000));
+                            graphite_state.reconnect();
+                        }
+                    }
+                },
+                Err(_) => {}
+            }
+        }
+    });
+
+    // Connect to Sensor and setup Internal States
 
     let mut bme: Option<Device<I2cDriver>> = None;
 
@@ -63,16 +84,13 @@ fn main() -> std::io::Result<()> {
 
     let mut bme = bme.expect("Cannot find i2c Device.");
 
-    let graphite_url = env::var("GRAHITE_URL").unwrap_or(String::from("default"));
-
-    let mut graphite_state =
-        graphite::init(graphite_url.as_str()).expect("Failed to connect to graphite");
-
     let mut bsec_state = bsec::State::default();
 
     bsec::get_version(&mut bsec_state);
 
     bsec::init(&mut bsec_state);
+
+    // Load BSEC last state
 
     let last_state = fs::read("last_state.bin").ok();
 
@@ -85,7 +103,28 @@ fn main() -> std::io::Result<()> {
         }
     }
 
+    // Handle Graceful Exit
+
+    let (exit_tx, exit_rx) = channel();
+
+    ctrlc::set_handler(move || {
+        let serialized_state = bsec::get_bsec_state();
+
+        fs::write("last_state.bin", serialized_state)
+            .map(|_| info!("BSEC state saved."))
+            .unwrap_or_else(|_| warn!("Error saving BSEC state."));
+
+        exit_tx
+            .send(0)
+            .unwrap_or_else(|_| error!("Failed to signal termination."));
+    })
+    .expect("Error setting Ctrl-C handler");
+
+    // Setup sensor config
+
     bsec::update_subscription(&mut bsec_state, BSEC_SAMPLE_RATE_LP as f32);
+
+    // Start Data reading loop
 
     while run_loop {
         let start_timestamp = Local::now().timestamp_nanos();
@@ -135,6 +174,8 @@ fn main() -> std::io::Result<()> {
 
             let mut measure_results = bme.get_data(bsec_state.sensor_settings.op_mode.into());
 
+            // Read data from sensor until valid measurement is obtained
+
             loop {
                 if measure_results.is_ok() && // no new data
                  measure_results.as_ref().unwrap()[0].status & 0b10000 == 0b10000 && // heater stable
@@ -162,19 +203,7 @@ fn main() -> std::io::Result<()> {
 
             let metrics_string = graphite::build_output(sensor_outputs, start_timestamp);
 
-            graphite::send_metrics(&mut graphite_state, metrics_string)
-                .err()
-                .map(|e| {
-                    error!("Failed to send metrics: {}", e);
-                    loop {
-                        match graphite_state.reconnect() {
-                            Ok(_) => {
-                                break;
-                            }
-                            Err(_) => spin_sleep::sleep(Duration::from_micros(500000)),
-                        }
-                    }
-                });
+            data_tx.send(metrics_string);
         }
 
         // ---------------------------------------------
@@ -197,7 +226,8 @@ fn main() -> std::io::Result<()> {
 
         spin_sleep::sleep(Duration::from_micros(wait_time as u64));
 
-        rx.try_recv()
+        exit_rx
+            .try_recv()
             .and_then(|_| {
                 run_loop = false;
                 Ok(())
@@ -206,12 +236,4 @@ fn main() -> std::io::Result<()> {
     }
 
     Ok(())
-}
-
-fn print_result(result: i32, op_name: &str) {
-    if result == bsec_library_return_t::BSEC_OK {
-        debug!("BSEC {}: OK", op_name);
-    } else {
-        error!("BSEC {}: Error {}", op_name, result);
-    }
 }
