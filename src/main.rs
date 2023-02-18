@@ -14,7 +14,7 @@ use chrono::{Local, NaiveDateTime};
 use dotenvy::dotenv;
 use std::cmp::max;
 use std::path::Path;
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, TryRecvError};
 use std::time::Duration;
 use std::{env, fs, thread};
 mod bme;
@@ -43,22 +43,30 @@ fn main() -> std::io::Result<()> {
         loop {
             let data_res = data_rx.try_recv();
             match data_res {
-                Ok(data) => loop {
+                Ok(data) =>  'sendLine: loop {
                     let send_res = graphite::send_metrics(&mut graphite_state, data.as_str());
                     match send_res {
                         Ok(_) => {
                             debug!("data sent successfully");
-                            break;
+                            break 'sendLine;
                         }
                         Err(e) => {
                             error!("Failed to send metrics: {}", e);
-                            spin_sleep::sleep(Duration::from_micros(500000));
-                            graphite_state.reconnect();
+                            spin_sleep::sleep(Duration::from_micros(1000000));
+                            let reconnect_res = graphite_state.reconnect();
+                            if let Some(err) = reconnect_res.err() {
+                                info!("Failed to reconnect server: {}", err);
+                            }
                         }
                     }
                 },
-                Err(_) => {}
+                Err(e) => {
+                    if e != TryRecvError::Empty {
+                        error!("Error when receiving data: {:?}", e);
+                    }
+                }
             }
+            spin_sleep::sleep(Duration::from_micros(500000));
         }
     });
 
