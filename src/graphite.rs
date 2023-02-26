@@ -1,6 +1,6 @@
 use crate::*;
 use std::{
-    io::{Error, Write},
+    io::{Error, Write, ErrorKind},
     net::TcpStream,
 };
 
@@ -62,7 +62,9 @@ pub fn send_metrics(state: &mut State, metrics: &str) -> Result<(), Error> {
         Some(connection) => {
             connection.write(metrics.as_bytes())?;
         }
-        None => {}
+        None => {
+            return Err(Error::new(ErrorKind::Other, "not connected"));
+        }
     }
     Ok(())
 }
