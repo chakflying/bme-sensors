@@ -63,10 +63,11 @@ fn main() -> std::io::Result<()> {
                 Err(e) => {
                     if e != TryRecvError::Empty {
                         error!("Error when receiving data: {:?}", e);
+                    } else {
+                        spin_sleep::sleep(Duration::from_micros(500000));
                     }
                 }
             }
-            spin_sleep::sleep(Duration::from_micros(500000));
         }
     });
 
