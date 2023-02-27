@@ -3,3 +3,6 @@
 lib/lib/bme68x.o
 last_state.bin
 .env
+lib/bsec_datatypes.h
+lib/bsec_interface.h
+lib/libalgobsec.a
