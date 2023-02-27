@@ -56,6 +56,7 @@ StartLimitIntervalSec=0
 Type=simple
 Restart=always
 RestartSec=1
+Environment="RUST_LOG=warn"
 User=<current-user>
 WorkingDirectory=/<project directory>
 ExecStart=/<project directory>/target/release/bme-sensors
