@@ -44,6 +44,7 @@ pub fn build_output(sensor_outputs: Vec<bsec_output_t>, timestamp: i64) -> Strin
             bsec_virtual_sensor_t::BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY => "study.humidity",
             bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_PRESSURE => "study.pressure",
             bsec_virtual_sensor_t::BSEC_OUTPUT_BREATH_VOC_EQUIVALENT => "study.voc",
+            bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_GAS => "study.gas_resistance",
             _ => "study.unknown",
         };
         metrics_string.push_str(&*format!(

@@ -71,6 +71,13 @@ pub fn update_subscription(state: &mut State, mode: f32) {
             sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_PRESSURE as u8,
         });
 
+    state
+        .requested_virtual_sensors
+        .push(bsec_sensor_configuration_t {
+            sample_rate: mode,
+            sensor_id: bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_GAS as u8,
+        });
+
     if mode == BSEC_SAMPLE_RATE_LP as f32 {
         state
             .requested_virtual_sensors
@@ -251,6 +258,9 @@ pub fn do_steps(state: &mut State, inputs: &Vec<bsec_input_t>) -> Vec<bsec_outpu
             }
             bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_GAS_INDEX => {
                 debug!("Gas Index: {}", output.signal);
+            }
+            bsec_virtual_sensor_t::BSEC_OUTPUT_RAW_GAS => {
+                debug!("Gas sensor resistance: {}", output.signal);
             }
             _ => {
                 debug!("{:?}", output);
