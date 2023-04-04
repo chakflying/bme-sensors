@@ -185,7 +185,7 @@ fn main() -> std::io::Result<()> {
 
             // Read data from sensor until valid measurement is obtained
 
-            loop {
+            for _ in 1..1000 {
                 if measure_results.is_ok() && // no new data
                  measure_results.as_ref().unwrap()[0].status & 0b10000 == 0b10000 && // heater stable
                     measure_results.as_ref().unwrap()[0].status & 0b100000 == 0b100000
