@@ -43,7 +43,7 @@ fn main() -> std::io::Result<()> {
         loop {
             let data_res = data_rx.try_recv();
             match data_res {
-                Ok(data) =>  'sendLine: loop {
+                Ok(data) => 'sendLine: loop {
                     let send_res = graphite::send_metrics(&mut graphite_state, data.as_str());
                     match send_res {
                         Ok(_) => {
@@ -199,20 +199,22 @@ fn main() -> std::io::Result<()> {
                 measure_results = bme.get_data(bsec_state.sensor_settings.op_mode.into());
             }
 
-            let measure_results = measure_results.unwrap();
+            if measure_results.is_ok() {
+                let measure_results = measure_results.unwrap();
 
-            debug!("{:#?}", measure_results[0]);
+                debug!("{:#?}", measure_results[0]);
 
-            let sensor_inputs =
-                bsec::process_data(&bsec_state, &measure_results[0], start_timestamp);
+                let sensor_inputs =
+                    bsec::process_data(&bsec_state, &measure_results[0], start_timestamp);
 
-            debug!("{:?}", sensor_inputs);
+                debug!("{:?}", sensor_inputs);
 
-            let sensor_outputs = bsec::do_steps(&mut bsec_state, &sensor_inputs);
+                let sensor_outputs = bsec::do_steps(&mut bsec_state, &sensor_inputs);
 
-            let metrics_string = graphite::build_output(sensor_outputs, start_timestamp);
+                let metrics_string = graphite::build_output(sensor_outputs, start_timestamp);
 
-            data_tx.send(metrics_string);
+                data_tx.send(metrics_string);
+            }
         }
 
         // ---------------------------------------------
@@ -230,7 +232,7 @@ fn main() -> std::io::Result<()> {
             .unwrap()
         );
 
-        let wait_time = max(1, (next_call - Local::now().timestamp_nanos()) / 1000 - 200);
+        let wait_time = max(1000, (next_call - Local::now().timestamp_nanos()) / 1000 - 200);
         info!("Sleeping for: {} ms", wait_time / 1000);
 
         spin_sleep::sleep(Duration::from_micros(wait_time as u64));
