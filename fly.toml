@@ -1,43 +1,74 @@
-# fly.toml file generated for bme-sensors-logging on 2023-01-16T17:26:30+08:00
+# fly.toml app configuration file generated for bme-sensors-logging on 2023-07-28T03:16:13+08:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
 app = "bme-sensors-logging"
+primary_region = "hkg"
 kill_signal = "SIGINT"
-kill_timeout = 5
-
-[build]
-  image = "victoriametrics/victoria-metrics"
-
-[mounts]
-  source="vicky_data"
-  destination="/victoria-metrics-data"
+kill_timeout = "5s"
 
 [experimental]
-  auto_rollback = true
   cmd = ["--graphiteListenAddr=:2003"]
+  auto_rollback = true
+
+[build]
+  image = "victoriametrics/victoria-metrics:stable"
+
+[env]
+  LOGGER_TIMEZONE = "Asia/Hong_Kong"
+
+[[mounts]]
+  source = "vicky_data"
+  destination = "/victoria-metrics-data"
+  processes = ["app"]
 
 [[services]]
-  internal_port = 8428
   protocol = "tcp"
+  internal_port = 8428
 
   [[services.ports]]
     port = 8428
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
 
   [[services.tcp_checks]]
-    grace_period = "5s"
     interval = "15s"
-    restart_limit = 0
     timeout = "2s"
+    grace_period = "5s"
+    restart_limit = 0
 
 [[services]]
-  internal_port = 2003
-  protocol = "tcp"
-
-  [[services.ports]]
-    port = 2003
-
-[[services]]
-  internal_port = 2003
   protocol = "udp"
+  internal_port = 8428
+
+  [[services.ports]]
+    port = 8428
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 2003
 
   [[services.ports]]
     port = 2003
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[[services]]
+  protocol = "udp"
+  internal_port = 2003
+
+  [[services.ports]]
+    port = 2003
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
