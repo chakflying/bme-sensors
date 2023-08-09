@@ -64,3 +64,23 @@ ExecStart=/<project directory>/target/release/bme-sensors
 [Install]
 WantedBy=multi-user.target
 ```
+
+Use VictoriaMetrics Agent to buffer data in case of network issues:
+
+```shell
+[Unit]
+Description=Victoria Metrics Agent service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=root
+WorkingDirectory=/tmp
+ExecStart=/usr/local/bin/vmagent -remoteWrite.url=http://<server-url>:8428/api/v1/write -graphiteListenAddr=:2003
+
+[Install]
+WantedBy=multi-user.target
+```
