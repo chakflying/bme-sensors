@@ -1,6 +1,6 @@
 use crate::*;
 use std::{
-    io::{Error, Write, ErrorKind},
+    io::{Error, ErrorKind, Write},
     net::TcpStream,
 };
 
@@ -21,14 +21,20 @@ impl State {
     }
 }
 
-pub fn init(url: &str) -> Result<State, Error> {
-    let connection = TcpStream::connect(url)?;
-    connection.set_nodelay(true)?;
-    connection.set_nonblocking(true)?;
-    Ok(State {
-        url: String::from(url),
-        connection: Some(connection),
-    })
+pub fn init(url: &str) -> State {
+    if let Ok(connection) = TcpStream::connect(url) {
+        connection.set_nodelay(true);
+        connection.set_nonblocking(true);
+        return State {
+            url: String::from(url),
+            connection: Some(connection),
+        };
+    } else {
+        return State {
+                url: String::from(url),
+                connection: None,
+            }
+    }
 }
 
 pub fn build_output(sensor_outputs: Vec<bsec_output_t>, timestamp: i64) -> String {
