@@ -14,7 +14,7 @@ pub struct I2cDriver {
 pub fn create_device(path: &Path) -> I2cDriver {
     let mut device = I2cdev::new(path).expect("Failed to create device");
     device
-        .set_slave_address(0x77)
+        .set_slave_address(bme68x_rust::I2C_ADDR_HIGH.into())
         .expect("Cannot set device address");
     I2cDriver {
         path: path.to_path_buf(),
