@@ -82,7 +82,7 @@ fn main() -> std::io::Result<()> {
                 if result {
                     info!("Found i2c Device on {}", path.display());
                     let driver = bme::create_device(path);
-                    bme = Some(bme::init(driver));
+                    bme = bme::init(driver);
                     break;
                 }
             }

@@ -22,8 +22,16 @@ pub fn create_device(path: &Path) -> I2cDriver {
     }
 }
 
-pub fn init(driver: I2cDriver) -> Device<I2cDriver> {
-    Device::initialize(driver).expect("Cannot initialize device")
+pub fn init(driver: I2cDriver) -> Option<Device<I2cDriver>> {
+    match Device::initialize(driver) {
+        Ok(device) => {
+            return Some(device)
+        }
+        Err(e) => {
+            error!("{:?}", e);
+            return None
+        }
+    }
 }
 
 impl Interface for I2cDriver {
