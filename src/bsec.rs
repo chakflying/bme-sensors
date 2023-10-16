@@ -1,6 +1,12 @@
-use bme68x_rust::SensorData;
+#![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
+#![allow(dead_code)]
+#![allow(unused_must_use)]
+include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-use crate::*;
+use bme68x_rust::SensorData;
+use log::{debug, error, info};
 
 #[derive(Default)]
 pub struct State {

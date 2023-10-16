@@ -1,6 +1,7 @@
 use bme68x_rust::{CommInterface, Device, Error as BmeError, Interface};
 use embedded_hal::i2c::blocking::I2c;
 use linux_embedded_hal::I2cdev;
+use log::error;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 

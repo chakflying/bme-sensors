@@ -1,4 +1,5 @@
-use crate::*;
+use crate::bsec::{bsec_virtual_sensor_t, bsec_output_t};
+use log::debug;
 use std::{
     io::{Error, ErrorKind, Write},
     net::TcpStream,
@@ -23,8 +24,8 @@ impl State {
 
 pub fn init(url: &str) -> State {
     if let Ok(connection) = TcpStream::connect(url) {
-        connection.set_nodelay(true);
-        connection.set_nonblocking(true);
+        let _ = connection.set_nodelay(true);
+        let _ = connection.set_nonblocking(true);
         return State {
             url: String::from(url),
             connection: Some(connection),

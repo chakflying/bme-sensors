@@ -1,17 +1,9 @@
-#![allow(non_upper_case_globals)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
-#![allow(dead_code)]
-#![allow(unused_must_use)]
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
-
-#[macro_use]
-extern crate log;
-
-use bme::*;
+use bme::I2cDriver;
 use bme68x_rust::{Device, DeviceConfig, Filter, GasHeaterConfig, Interface, Odr};
+use bsec::BSEC_SAMPLE_RATE_LP;
 use chrono::{Local, NaiveDateTime};
 use dotenvy::dotenv;
+use log::{debug, error, info, warn};
 use std::cmp::max;
 use std::path::Path;
 use std::sync::mpsc::{channel, TryRecvError};
@@ -184,7 +176,7 @@ fn main() -> std::io::Result<()> {
 
             // Read data from sensor until valid measurement is obtained
 
-            for _ in 1..1000 {
+            for i in 1..100 {
                 if measure_results.is_ok() && // no new data
                  measure_results.as_ref().unwrap()[0].status & 0b10000 == 0b10000 && // heater stable
                     measure_results.as_ref().unwrap()[0].status & 0b100000 == 0b100000
@@ -193,7 +185,11 @@ fn main() -> std::io::Result<()> {
                     break;
                 }
 
-                bme.interface.delay(1000);
+                if i == 50 {
+                    info!("Sensor not ready, polling again...");
+                }
+
+                bme.interface.delay(10000);
 
                 measure_results = bme.get_data(bsec_state.sensor_settings.op_mode.into());
             }
@@ -212,7 +208,9 @@ fn main() -> std::io::Result<()> {
 
                 let metrics_string = graphite::build_output(sensor_outputs, start_timestamp);
 
-                data_tx.send(metrics_string);
+                if let Err(e) = data_tx.send(metrics_string) {
+                    warn!("Failed to send sensor output to output thread: {:?}", e);
+                }
             }
         }
 
