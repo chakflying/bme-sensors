@@ -135,7 +135,7 @@ fn main() -> std::io::Result<()> {
     // Start Data reading loop
 
     while run_loop {
-        let start_timestamp = Local::now().timestamp_nanos();
+        let start_timestamp = Local::now().naive_local().timestamp_nanos();
 
         info!("Calling at:     {}", Local::now());
 
@@ -233,7 +233,7 @@ fn main() -> std::io::Result<()> {
 
         let wait_time = max(
             1000,
-            (next_call - Local::now().timestamp_nanos()) / 1000 - 200,
+            (next_call - Local::now().naive_local().timestamp_nanos()) / 1000 - 200,
         );
         info!("Sleeping for: {} ms", wait_time / 1000);
 
