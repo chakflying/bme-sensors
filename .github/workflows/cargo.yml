@@ -5,7 +5,7 @@ name: CI Build
 jobs:
   build_and_test:
     name: Rust project
-    runs-on: ubuntu-latest
+    runs-on: ARM64
     continue-on-error: true
     steps:
       - uses: actions/checkout@v2
