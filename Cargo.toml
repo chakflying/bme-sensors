@@ -8,8 +8,8 @@ edition = "2018"
 
 [dependencies]
 bme68x-rust = { git = "https://github.com/chakflying/bme68x-rust" }
-embedded-hal = "0.2.7"
-linux-embedded-hal = "0.3"
+embedded-hal = "1.0.0-alpha.8"
+linux-embedded-hal = "0.4.0-alpha.3"
 log = "0.4"
 env_logger = "0.10"
 dotenvy = "0.15"
@@ -25,4 +25,4 @@ default-features = false
 features = ["std", "clock"]
 
 [build-dependencies]
-bindgen = "0.64.0"
+bindgen = "0.68.1"

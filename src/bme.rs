@@ -1,8 +1,6 @@
 use bme68x_rust::{CommInterface, Device, Error as BmeError, Interface};
-use linux_embedded_hal::i2cdev::core::{I2CDevice, I2CTransfer};
-use linux_embedded_hal::i2cdev::linux::I2CMessage;
+use embedded_hal::i2c::blocking::I2c;
 use linux_embedded_hal::I2cdev;
-use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -24,12 +22,10 @@ pub fn create_device(path: &Path) -> I2cDriver {
 
 pub fn init(driver: I2cDriver) -> Option<Device<I2cDriver>> {
     match Device::initialize(driver) {
-        Ok(device) => {
-            return Some(device)
-        }
+        Ok(device) => return Some(device),
         Err(e) => {
             error!("{:?}", e);
-            return None
+            return None;
         }
     }
 }
@@ -45,22 +41,27 @@ impl Interface for I2cDriver {
     }
 
     fn read(&mut self, _reg_addr: u8, _reg_data: &mut [u8]) -> Result<(), BmeError> {
-        let write_message = I2CMessage::write(&[_reg_addr]);
-        let read_message = I2CMessage::read(_reg_data);
+        // Send the address to start reading, then read
         self.device
-            .transfer(&mut [write_message, read_message])
-            .map(|_| ())
+            .write_read(bme68x_rust::I2C_ADDR_HIGH, &[_reg_addr], _reg_data)
             .map_err(|err| {
-                println!("{}: {:#?}", err, err.source());
+                println!("{:#?}", err);
                 BmeError::CommunicationFailure
             })
     }
 
     fn write(&mut self, _reg_addr: u8, _reg_data: &[u8]) -> Result<(), BmeError> {
+        // Send pairs of [address, data] for writing
+        let mut bytes = Vec::with_capacity(_reg_data.len() * 2);
+        for (i, b) in _reg_data.iter().enumerate() {
+            bytes.push(_reg_addr + i as u8);
+            bytes.push(b.to_owned());
+        }
+
         self.device
-            .smbus_write_i2c_block_data(_reg_addr, _reg_data)
+            .write(bme68x_rust::I2C_ADDR_HIGH, bytes.as_slice())
             .map_err(|err| {
-                println!("{}: {:#?}", err, err.source());
+                println!("{:#?}", err);
                 BmeError::CommunicationFailure
             })
     }
