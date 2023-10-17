@@ -69,6 +69,7 @@ pub fn send_metrics(state: &mut State, metrics: &str) -> Result<(), Error> {
     match state.connection.as_mut() {
         Some(connection) => {
             connection.write(metrics.as_bytes())?;
+            connection.flush()?;
         }
         None => {
             return Err(Error::new(ErrorKind::Other, "not connected"));

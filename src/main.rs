@@ -1,7 +1,7 @@
 use bme::I2cDriver;
 use bme68x_rust::{Device, DeviceConfig, Filter, GasHeaterConfig, Interface, Odr};
 use bsec::BSEC_SAMPLE_RATE_LP;
-use chrono::{Local, NaiveDateTime};
+use chrono::{Local, NaiveDateTime, Utc};
 use dotenvy::dotenv;
 use log::{debug, error, info, warn};
 use std::cmp::max;
@@ -127,7 +127,7 @@ fn main() -> std::io::Result<()> {
     // Start Data reading loop
 
     while run_loop {
-        let start_timestamp = Local::now().naive_local().timestamp_nanos();
+        let start_timestamp = Local::now().naive_utc().timestamp_nanos();
 
         info!("Calling at:     {}", Local::now());
 
@@ -225,13 +225,14 @@ fn main() -> std::io::Result<()> {
                 (next_call % 1000000000) as u32
             )
             .unwrap()
-            .and_local_timezone(Local::now().timezone())
+            .and_local_timezone(Utc)
             .unwrap()
+            .with_timezone(&Local::now().timezone())
         );
 
         let wait_time = max(
             1000,
-            (next_call - Local::now().naive_local().timestamp_nanos()) / 1000 - 200,
+            (next_call - Local::now().naive_utc().timestamp_nanos()) / 1000 - 200,
         );
         info!("Sleeping for: {} ms", wait_time / 1000);
 
